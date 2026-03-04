@@ -1,7 +1,15 @@
 # Qwen3.5-35B-A3B on RTX 5080 16GB — Optimal llama.cpp Setup
 
-> **124 t/s generation · 152K context · Vision enabled · All GPU**  
-> Complete benchmarks, configs, and a previously undocumented context limit discovery for Qwen3.5 35B on consumer 16GB VRAM.
+```
+┌─────────────────────────────────────────────────────────────┐
+│   124 t/s generation   ·   152K context   ·   Vision on     │
+│   All 41 layers on GPU ·   15.4 GB VRAM   ·   Windows 11    │
+└─────────────────────────────────────────────────────────────┘
+```
+
+> Production-tested llama.cpp config for **Qwen3.5-35B-A3B** on a consumer 16GB GPU —
+> with verified benchmark numbers, working vision, and a previously undocumented
+> **hard performance cliff at exactly 155,904 tokens** (and the root cause).
 
 ---
 
@@ -43,43 +51,6 @@ A production-tested llama.cpp configuration for running **Qwen3.5-35B-A3B** (MoE
 | **Quality**     | 27B Q3_K_S     | 8004 | **36 t/s**  | 64K      | 12.9 GB |
 
 > **One server at a time.** The 35B alone uses 15.4 GB — no two models fit in 16 GB simultaneously.
-
----
-
-## The Discovery: 155,904 Token Context Cliff
-
-> **This is the main finding worth sharing.** If you run Qwen3.5-35B-A3B on a 16 GB GPU, there is a precise token count above which generation speed drops 10×. It is not a VRAM limit.
-
-### What happens
-
-```
-Context 155,904 tokens → 124 t/s  ✅
-Context 156,160 tokens →   9 t/s  ❌  (10x slower)
-```
-
-A 256-token increase cuts speed by 93%. Every context size above 156,160 stays at ~9 t/s regardless of how much VRAM remains.
-
-### Why it happens
-
-Qwen3.5-35B-A3B uses a **hybrid recurrent architecture** — 30 Gated DeltaNet (linear recurrent) layers interleaved with 10 standard Gated Attention layers. llama.cpp allocates a `CUDA_Host compute buffer` (pinned host RAM used for PCIe data transfers per inference pass) that grows proportionally with context.
-
-| Context     | CUDA_Host Buffer | Speed          |
-| ----------- | ---------------- | -------------- |
-| 64K         | 136 MB           | 109 t/s ✅     |
-| 96K         | 200 MB           | 109 t/s ✅     |
-| 128K        | 264 MB           | 119 t/s ✅     |
-| 148K        | 304 MB           | 114 t/s ✅     |
-| **155,904** | **312.52 MB**    | **124 t/s** ✅ |
-| 156,160     | 313.02 MB        | 9 t/s ❌       |
-| 160K        | 328 MB           | 10 t/s ❌      |
-| 192K        | 392 MB           | 8 t/s ❌       |
-| 256K        | 520 MB           | 9 t/s ❌       |
-
-The buffer crosses an internal alignment boundary between 312.52 MB and 313.02 MB — a **0.5 MB jump** between 155,904 and 156,160 tokens. Past this threshold, per-token PCIe transfer volume exceeds available bandwidth, causing the 10× slowdown.
-
-**This is not a VRAM issue.** The model fits in VRAM at all tested sizes. The constraint is PCIe bandwidth for the recurrent state transfers specific to this hybrid architecture.
-
-**Full write-up:** [`DISCOVERY.md`](DISCOVERY.md)
 
 ---
 
@@ -136,6 +107,43 @@ curl -X POST http://127.0.0.1:8002/v1/chat/completions \
 ```
 
 > **First 1–2 requests are slow** (~12 t/s). This is CUDA JIT compilation (PTX→sm_120 for Blackwell). Full speed kicks in from request 3 onward.
+
+---
+
+## The Discovery: 155,904 Token Context Cliff
+
+> **This is the main finding worth sharing.** If you run Qwen3.5-35B-A3B on a 16 GB GPU, there is a precise token count above which generation speed drops 10×. It is not a VRAM limit.
+
+### What happens
+
+```
+Context 155,904 tokens → 124 t/s  ✅
+Context 156,160 tokens →   9 t/s  ❌  (10x slower)
+```
+
+A 256-token increase cuts speed by 93%. Every context size above 156,160 stays at ~9 t/s regardless of how much VRAM remains.
+
+### Why it happens
+
+Qwen3.5-35B-A3B uses a **hybrid recurrent architecture** — 30 Gated DeltaNet (linear recurrent) layers interleaved with 10 standard Gated Attention layers. llama.cpp allocates a `CUDA_Host compute buffer` (pinned host RAM used for PCIe data transfers per inference pass) that grows proportionally with context.
+
+| Context     | CUDA_Host Buffer | Speed          |
+| ----------- | ---------------- | -------------- |
+| 64K         | 136 MB           | 109 t/s ✅     |
+| 96K         | 200 MB           | 109 t/s ✅     |
+| 128K        | 264 MB           | 119 t/s ✅     |
+| 148K        | 304 MB           | 114 t/s ✅     |
+| **155,904** | **312.52 MB**    | **124 t/s** ✅ |
+| 156,160     | 313.02 MB        | 9 t/s ❌       |
+| 160K        | 328 MB           | 10 t/s ❌      |
+| 192K        | 392 MB           | 8 t/s ❌       |
+| 256K        | 520 MB           | 9 t/s ❌       |
+
+The buffer crosses an internal alignment boundary between 312.52 MB and 313.02 MB — a **0.5 MB jump** between 155,904 and 156,160 tokens. Past this threshold, per-token PCIe transfer volume exceeds available bandwidth, causing the 10× slowdown.
+
+**This is not a VRAM issue.** The model fits in VRAM at all tested sizes. The constraint is PCIe bandwidth for the recurrent state transfers specific to this hybrid architecture.
+
+**Full write-up:** [`DISCOVERY.md`](DISCOVERY.md)
 
 ---
 
