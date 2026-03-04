@@ -49,7 +49,6 @@ desktop.ini
 *.png
 *.jpg
 *.jpeg
-!docs/images/
 test_images/
 
 # --- Stray artifacts ---

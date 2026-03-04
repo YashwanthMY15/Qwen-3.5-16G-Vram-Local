@@ -47,10 +47,6 @@
 
 <br>
 
-<img src="docs/images/qwen-35b-banner.png" alt="Qwen 3.5 35B Benchmark Banner" width="100%">
-
-<br>
-
 > 🚀 **RTX 5080 / 5090 owner?** There's a native SM120 build guide that eliminates JIT warmup and adds ~10-20% speed. **[Jump to Advanced Build →](#-rtx-50805090-native-build-advanced)**
 
 </div>
