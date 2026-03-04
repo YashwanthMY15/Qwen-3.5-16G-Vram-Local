@@ -1,0 +1,71 @@
+# ============================================================
+# qwen35-rtx5080-guide — .gitignore
+# ============================================================
+
+# --- Models (multi-gigabyte, never commit) ---
+models/
+*.gguf
+*.safetensors
+*.bin
+*.pt
+*.pth
+
+# --- llama.cpp source tree (use official releases) ---
+llama.cpp/
+llama-bin/
+*.exe
+*.dll
+*.zip
+*.so
+*.dylib
+
+# --- Python environments ---
+venv/
+venv_vllm/
+.venv/
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+dist/
+build/
+
+# --- Logs (contain full absolute paths, no value for others) ---
+logs/
+*.log
+
+# --- Archive (old superseded scripts) ---
+archive/
+
+# --- Sensitive / OS-specific ---
+.env
+.env.*
+*.secret
+Thumbs.db
+.DS_Store
+desktop.ini
+
+# --- Images ---
+*.png
+*.jpg
+*.jpeg
+
+# --- Stray artifacts ---
+nul
+*.tmp
+*.bak
+*.swp
+*.swo
+
+# --- IDE ---
+.idea/
+.vscode/
+*.code-workspace
+
+# --- Raw benchmark JSON (contain absolute paths; BENCHMARK_RESULTS.md is the clean summary) ---
+results/benchmark_*.json
+results/test_results_*.json
+
+# --- Misc large downloads ---
+*.zip
+llama*.zip

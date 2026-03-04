@@ -1,0 +1,246 @@
+# ============================================
+# Qwen3.5 LLM Server Configuration
+# RTX 5080 16GB - Optimized Settings
+# ============================================
+
+# Directory Paths — edit these to match your installation
+# Use absolute paths or paths relative to the repo root
+paths:
+  llama_dir: "./llama-bin" # folder containing llama-server.exe
+  models_dir: "./models/unsloth-gguf" # folder containing .gguf files
+  logs_dir: "./logs"
+  results_dir: "./results"
+
+# Hardware Constraints
+hardware:
+  vram_total_gb: 16
+  vram_safe_limit_gb: 15 # Leave 1GB buffer
+  ram_total_gb: 96
+
+# ============================================
+# Server Definitions
+# ============================================
+servers:
+  # CODING SERVER - 35B-A3B Q3_K_S MoE — VERIFIED 124 t/s @ 152K with vision
+  # NOTE: This model alone uses ~15.4GB — no other server can run alongside it
+  # CONTEXT LIMIT: 155,904 tokens (≈152K) is the hard ceiling for full speed
+  #   - 155,904 → CUDA_Host buffer = 312.52 MB → fast (124 t/s)
+  #   - 156,160 → CUDA_Host buffer = 313.02 MB → slow (9 t/s) — PCIe bottleneck
+  # WHY THIS LIMIT: Hybrid DeltaNet architecture allocates CUDA_Host compute buffer
+  #   proportional to context. Above ~312.5 MB threshold, PCIe transfer volume per
+  #   token exceeds bandwidth → 10x slowdown. NOT a VRAM issue (VRAM still fits).
+  coding:
+    enabled: true
+    port: 8002
+    name: "Qwen3.5-35B-A3B-Coding"
+    model: "Qwen3.5-35B-A3B-Q3_K_S.gguf" # Q3_K_S — all 41 layers GPU
+    mmproj: "mmproj-35B-F16.gguf" # Vision included (projection_dim=2048 matches n_embd)
+    config:
+      context: 155904 # 152K — HARD MAX for full speed (155,904 exact, 156,160 breaks)
+      gpu_layers: 99 # All 41/41 layers on GPU
+      flash_attn: "on" # MUST be on for iq4_nl KV
+      cache_type_k: "iq4_nl" # MoE KV: 856 MB at 152K (vs 360MB at 64K)
+      cache_type_v: "iq4_nl"
+      temp: 0.6
+      top_p: 0.95
+      top_k: 20
+      presence_penalty: 0.0
+      enable_thinking: false
+    vram_estimate_gb: 15.4 # model=14.15 + KV=0.86 + mmproj=0.86 + RS=0.25 + compute=0.49
+    use_case: "coding"
+    description: "35B MoE — 124 t/s coding, 538 t/s prompt, 152K ctx, vision, all GPU"
+    benchmark_verified: "2026-03-04 | 15-test bench | avg=124.7 t/s peak=166.4 t/s | 152K+vision | VRAM=15.4GB"
+
+  # FAST VISION SERVER - Quick multimodal tasks
+  fast_vision:
+    enabled: true
+    port: 8003
+    name: "Qwen3.5-9B-FastVision"
+    model: "Qwen3.5-9B-UD-Q4_K_XL.gguf"
+    mmproj: "mmproj-F16.gguf"
+    config:
+      context: 262144 # 256K FULL MAX - all layers GPU, 5.4 GB VRAM headroom
+      gpu_layers: 99
+      flash_attn: "on" # MUST be "on" (not auto) for quantized KV cache + best perf
+      cache_type_k: "q8_0" # WINNER: fastest gen (97.5 avg / 112 peak), 4352 MB at 256K
+      cache_type_v: "q8_0" # q8_0 > q4_0 > iq4_nl on RTX 5080 SM120
+      temp: 0.7
+      top_p: 0.8
+      top_k: 20
+      presence_penalty: 1.5
+      enable_thinking: false # CRITICAL: prevents 2-3x slowdown from thinking mode
+    vram_estimate_gb: 10.6 # 5.0 model + 0.9 mmproj + 4.25 KV + 0.5 compute
+    use_case: "fast_vision"
+    description: "Full 256K context, q8_0 KV, ~97.5 t/s avg / 112 t/s peak, 5.4 GB headroom"
+
+  # QUALITY SERVER - 27B Q3_K_S dense — VERIFIED 36 t/s
+  # Dense model: all 27B params active per token (best quality/token)
+  quality_vision:
+    enabled: true
+    port: 8004
+    name: "Qwen3.5-27B-Quality"
+    model: "Qwen3.5-27B-Q3_K_S.gguf"
+    mmproj: "mmproj-27B-F16.gguf"
+    config:
+      context: 65536
+      gpu_layers: 99 # All 65/65 layers on GPU
+      flash_attn: "on"
+      cache_type_k: "iq4_nl" # 1152MB at 64K
+      cache_type_v: "iq4_nl"
+      temp: 0.7
+      top_p: 0.8
+      top_k: 20
+      presence_penalty: 1.5
+      enable_thinking: false
+    vram_estimate_gb: 12.9 # model=11.19 + KV=1.15 + mmproj=0.93 + compute=0.49
+    use_case: "quality"
+    description: "27B dense — 36 t/s, 325 t/s prompt, 64K ctx, vision, best quality/token"
+    benchmark_verified: "2026-03-04 | 8-prompt coding | avg=36.3 t/s peak=37.5 min=33.6"
+
+  # CODING + VISION SERVER - Hybrid capability
+  coding_vision:
+    enabled: false # Optional, enable when needed
+    port: 8005
+    name: "Qwen3.5-35B-A3B-Vision"
+    model: "Qwen3.5-35B-A3B-Q3_K_S.gguf"
+    mmproj: "mmproj-35B-F16.gguf"
+    config:
+      context: 32768
+      gpu_layers: 99
+      flash_attn: "on"
+      cache_type_k: "iq4_nl"
+      cache_type_v: "iq4_nl"
+      temp: 0.6
+      top_p: 0.95
+      top_k: 20
+      presence_penalty: 0.0
+      enable_thinking: false
+    vram_estimate_gb: 14
+    use_case: "coding_vision"
+    description: "Coding + Vision combined, 32K context"
+
+  # UNCENSORED SERVER - Decensored model
+  uncensored:
+    enabled: false # Optional, enable when needed
+    port: 8006
+    name: "Qwen3.5-35B-A3B-Uncensored"
+    model: "Qwen3.5-35B-A3B-heretic-Q4_K_M.gguf"
+    mmproj: "mmproj-heretic-BF16.gguf"
+    config:
+      context: 32768
+      gpu_layers: 99
+      flash_attn: "auto"
+      cache_type_k: "f16"
+      cache_type_v: "f16"
+      temp: 0.7
+      top_p: 0.9
+      top_k: 40
+      presence_penalty: 0.0
+      enable_thinking: false
+    vram_estimate_gb: 16 # Exceeds VRAM, will be slow
+    use_case: "uncensored"
+    description: "Decensored model (11% refusals), slow due to VRAM constraints"
+
+# ============================================
+# Server Profiles (VRAM-optimized combinations)
+# ============================================
+profiles:
+  # Standard profile - Most common use
+  standard:
+    name: "Standard Setup"
+    description: "Coding + Fast Vision + Quality Vision"
+    servers: ["coding", "fast_vision", "quality_vision"]
+    total_vram_gb: 33 # Will use CPU offload
+    warning: "Exceeds VRAM, some models will use CPU offload"
+
+  # Speed profile - Fastest responses
+  speed:
+    name: "Speed Optimized"
+    description: "Coding + Fast Vision only"
+    servers: ["coding", "fast_vision"]
+    total_vram_gb: 20
+    warning: "Still exceeds VRAM, 35B may offload partially"
+
+  # Minimal profile - Guaranteed VRAM fit
+  minimal:
+    name: "VRAM Safe"
+    description: "Fast Vision only (guaranteed to fit)"
+    servers: ["fast_vision"]
+    total_vram_gb: 6
+    warning: null
+
+  # Quality profile - Best quality
+  quality:
+    name: "Quality First"
+    description: "Quality Vision + Fast Vision"
+    servers: ["quality_vision", "fast_vision"]
+    total_vram_gb: 19
+    warning: "May exceed VRAM with long contexts"
+
+  # Uncensored profile
+  uncensored:
+    name: "Uncensored Mode"
+    description: "Uncensored + Fast Vision"
+    servers: ["uncensored", "fast_vision"]
+    total_vram_gb: 22
+    warning: "Uncensored will be slow due to VRAM"
+
+# ============================================
+# Benchmark Configuration
+# ============================================
+benchmark:
+  warmup_runs: 2
+  test_runs: 5
+  timeout_seconds: 120
+
+  prompts:
+    simple:
+      - "Hello, respond with just 'Hi'"
+      - "What is 2+2?"
+      - "Say 'test'"
+
+    coding:
+      - "Write a Python function to calculate fibonacci numbers"
+      - "Create a FastAPI endpoint for user CRUD operations"
+      - "Write a function to reverse a string in Python"
+      - "Create a class for a simple bank account"
+      - "Write a regex to match email addresses"
+
+    reasoning:
+      - "If all Bloops are Razzies and all Razzies are Lazzies, are all Bloops definitely Lazzies?"
+      - "What is 15% of 847?"
+      - "Explain the difference between async/await and promises"
+
+    complex:
+      - "Design a REST API for a blog platform with users, posts, and comments"
+      - "Explain how garbage collection works in Python"
+      - "What are the trade-offs between SQL and NoSQL databases?"
+
+  context_sizes:
+    - 4096
+    - 8192
+    - 16384
+    - 32768
+    - 65536
+
+  concurrent_requests:
+    - 1
+    - 2
+    - 5
+    - 10
+
+# ============================================
+# Quality Test Configuration
+# ============================================
+quality_tests:
+  coding_accuracy:
+    - prompt: "Write a function to check if a number is prime"
+      expected_keywords: ["def", "return", "for", "if", "%"]
+    - prompt: "Create a class for a linked list"
+      expected_keywords: ["class", "Node", "next", "self"]
+
+  vision_accuracy:
+    - prompt: "How many objects are in this image?"
+      requires_image: true
+    - prompt: "What is the main color in this image?"
+      requires_image: true
