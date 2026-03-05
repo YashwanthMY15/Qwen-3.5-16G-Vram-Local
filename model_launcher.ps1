@@ -16,7 +16,7 @@ switch ($Model.ToLower()) {
         $port    = 8002
         $model   = "$MODELS\Qwen3.5-35B-A3B-Q3_K_S.gguf"
         $mmproj  = "$MODELS\mmproj-35B-F16.gguf"
-        $ctx     = 65536    # 64K — max that fits in 16GB with this model at full speed
+        $ctx     = 98304    # 96K — KV ~540 MiB, total ~15246 MiB, ~500 MiB headroom
         $extra   = @("--parallel", "1")
     }
     "9b" {
@@ -85,7 +85,7 @@ $proc.Id | Out-File "$logfile.pid" -Encoding ascii
 
 Write-Host ""
 Write-Host "[*] Model loading..." -ForegroundColor Yellow
-Write-Host "    35B/27B: ~60-90s   9B: ~30s" -ForegroundColor DarkGray
+Write-Host "    35B/27B: ~30-60s   9B: ~15s" -ForegroundColor DarkGray
 Write-Host ""
 Write-Host "    Poll until ready:" -ForegroundColor DarkGray
 Write-Host "      curl http://127.0.0.1:$port/health" -ForegroundColor White
