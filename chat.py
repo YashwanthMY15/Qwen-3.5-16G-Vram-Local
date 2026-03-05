@@ -47,9 +47,10 @@ except ImportError:
     _LANCZOS = None
     _HAS_PIL = False
 
-# Max pixels before auto-resize (1280×1280 = 1,638,400)
-# Reduces tile count ~3-4× vs a 3316×3216 raw screenshot → encoding ~4× faster
-IMAGE_MAX_PIXELS = 1280 * 1280
+# Resize longest side to this before encoding.
+# 768px matches the mmproj ViT tile size exactly — no benefit going higher.
+# 3316px image → 768px = ~570 tokens instead of ~1600 → gen speed ~90 t/s vs ~63 t/s
+IMAGE_MAX_SIDE = 768
 
 # ── ANSI colours ──────────────────────────────────────────────────────────────
 RESET = "\033[0m"
@@ -85,10 +86,10 @@ def load_image_b64(path: str) -> tuple[str, str, str]:
 
         img = PILImg.open(path)
         orig_w, orig_h = img.size
-        orig_pixels = orig_w * orig_h
+        longest = max(orig_w, orig_h)
 
-        if orig_pixels > IMAGE_MAX_PIXELS:
-            scale = (IMAGE_MAX_PIXELS / orig_pixels) ** 0.5
+        if longest > IMAGE_MAX_SIDE:
+            scale = IMAGE_MAX_SIDE / longest
             new_w = int(orig_w * scale)
             new_h = int(orig_h * scale)
             resample = getattr(
@@ -99,15 +100,14 @@ def load_image_b64(path: str) -> tuple[str, str, str]:
             img = img.resize((new_w, new_h), resample)
             info = (
                 f"{orig_w}×{orig_h} → {new_w}×{new_h} "
-                f"({orig_pixels // 1_000_000:.1f}MP → {new_w * new_h // 1_000_000:.1f}MP, "
-                f"resized for speed)"
+                f"(~{longest // new_w}x downscale, matches ViT tile size)"
             )
             buf = io.BytesIO()
             img.convert("RGB").save(buf, format="JPEG", quality=92)
             b64 = base64.b64encode(buf.getvalue()).decode("utf-8")
             mime = "image/jpeg"
         else:
-            info = f"{orig_w}×{orig_h} ({orig_pixels // 1_000_000:.1f}MP, no resize needed)"
+            info = f"{orig_w}×{orig_h} (no resize needed)"
             with open(path, "rb") as f:
                 b64 = base64.b64encode(f.read()).decode("utf-8")
     else:
@@ -247,12 +247,20 @@ def main():
 
     base_url = f"http://{args.host}:{args.port}"
 
+    # Port → model label
+    model_labels = {
+        8002: "Qwen3.5-35B-A3B  ~100 t/s  (coding/reasoning)",
+        8003: "Qwen3.5-9B       ~97  t/s  (fast vision)",
+        8004: "Qwen3.5-27B      ~36  t/s  (quality)",
+    }
+    model_label = model_labels.get(args.port, f"port {args.port}")
+
     print()
     print(c("╔═══════════════════════════════════════════════════════╗", CYAN))
-    print(c("║  Qwen3.5-35B Terminal Chat  │  text + vision  ║", CYAN))
+    print(c("║      Qwen3.5 Terminal Chat  │  text + vision          ║", CYAN))
     print(c("╚═══════════════════════════════════════════════════════╝", CYAN))
+    print(c(f"  Model   : {model_label}", CYAN))
     print(c(f"  Server  : {base_url}", DIM))
-    print(c(f"  Context : 64K tokens", DIM))
     print(
         c(
             f"  System  : {args.system[:60]}{'...' if len(args.system) > 60 else ''}",
@@ -400,9 +408,10 @@ Commands:
 
 Vision tips:
   • Works with .jpg .png .gif .webp .bmp
-  • Auto-resizes to 1280×1280 max (1.6MP) before encoding
-    → faster encoding, fewer KV cache tokens, higher gen t/s
-  • Large images (e.g. 3316×3216) are scaled down automatically
+  • Auto-resizes longest side to 768px before encoding
+    → matches ViT tile size exactly, ~570 tokens vs ~1600
+    → gen speed ~90 t/s vs ~63 t/s on large images
+  • Large images (e.g. 3316×3216) are scaled to 768×745 automatically
   • After sending an image you can follow up with text
   • /clear resets everything including images
   • Need Pillow for auto-resize: pip install Pillow
