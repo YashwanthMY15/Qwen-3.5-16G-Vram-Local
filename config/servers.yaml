@@ -23,7 +23,7 @@ hardware:
 servers:
   # CODING SERVER - 35B-A3B Q3_K_S MoE — VERIFIED 125 t/s @ 96K with vision (--parallel 1)
   # NOTE: This model alone uses ~15.4GB — no other server can run alongside it
-  # NOTE: 155,904 context with vision may cause instability; using 96K for stable performance
+  # NOTE: 155,904 is theoretical max, 120K recommended for stable Windows usage
   coding:
     enabled: true
     port: 8002

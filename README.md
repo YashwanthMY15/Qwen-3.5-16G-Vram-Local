@@ -30,7 +30,7 @@
   <tr>
     <td align="center">Q3_K_S · MoE</td>
     <td align="center">single token burst</td>
-    <td align="center">155,904 tokens</td>
+    <td align="center">120K tokens (155K max)</td>
     <td align="center"><b>mmproj loaded</b></td>
     <td align="center">all on GPU</td>
     <td align="center">245 MB free</td>
@@ -92,7 +92,7 @@ A production-tested [llama.cpp](https://github.com/ggml-org/llama.cpp) setup for
 | ------------------- | --------------------------------------------------------------------------------- |
 | ⚡ Generation speed | **125.8 t/s avg · 192 t/s peak** (with `--parallel 1`)                            |
 | 📥 Prompt ingestion | **538 t/s**                                                                       |
-| 🧠 Context window   | **155,904 tokens (≈152K)**                                                        |
+| 🧠 Context window   | **120K tokens (155K max) (≈152K)**                                                        |
 | 👁️ Vision           | **Yes** — [mmproj](https://huggingface.co/unsloth/Qwen3.5-35B-A3B-GGUF) loaded    |
 | 💾 VRAM used        | **15.4 GB** (245 MB free)                                                         |
 | 🎮 GPU layers       | **41 / 41** — fully on GPU                                                        |
@@ -327,6 +327,25 @@ This buffer grows with context size. Between 155,904 and 156,160 tokens, it cros
 **This is specific to hybrid recurrent architectures.** Pure transformer models (Qwen 9B, 27B) don't have this constraint — they don't use Gated DeltaNet layers and have no recurrent state PCIe transfers.
 
 📄 **Full technical write-up with reproduce steps:** [`DISCOVERY.md`](DISCOVERY.md)
+
+---
+
+> **📝 Important: Practical Limit for Windows Users**
+>
+> The **theoretical maximum** is **120K tokens (155K max)** (full 125 t/s speed). However, when running Windows with other applications, you need ~1GB VRAM headroom for the OS and other apps.
+>
+> **We recommend 120K tokens** as the practical sweet spot:
+>
+> | Context  |    Speed    |     VRAM     | Notes                                          |
+> | :------: | :---------: | :----------: | :--------------------------------------------- |
+> |   96K    |   125 t/s   |   ~15.3 GB   | Conservative                                   |
+> | **120K** | **120 t/s** | **~15.4 GB** | **✅ Recommended**                             |
+> |   155K   |   125 t/s   |   ~15.9 GB   | Theoretical max, may cause issues with Windows |
+>
+> - **120K tokens** gives you ~120 t/s (only **4% slower** than max)
+> - **+25% more context** vs 96K
+> - **Stable** with Windows + other apps running
+> - This is the default in our launch scripts
 
 ---
 
@@ -723,3 +742,5 @@ This project was created through extensive hands-on benchmarking and experimenta
 _Numbers are reproducible · PRs welcome · MIT license_
 
 </div>
+
+
