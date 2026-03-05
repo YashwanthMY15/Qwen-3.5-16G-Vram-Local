@@ -23,6 +23,7 @@ Vision example:
 
 import argparse
 import base64
+import io
 import json
 import mimetypes
 import os
@@ -31,6 +32,24 @@ import time
 import urllib.request
 import urllib.error
 from typing import Optional
+
+try:
+    from PIL import Image as _PIL_Image  # type: ignore[import]
+
+    _LANCZOS = getattr(
+        _PIL_Image,
+        "LANCZOS",
+        getattr(_PIL_Image, "Resampling", None) and _PIL_Image.Resampling.LANCZOS,
+    )  # type: ignore[attr-defined]
+    _HAS_PIL = True
+except ImportError:
+    _PIL_Image = None  # type: ignore[assignment]
+    _LANCZOS = None
+    _HAS_PIL = False
+
+# Max pixels before auto-resize (1280×1280 = 1,638,400)
+# Reduces tile count ~3-4× vs a 3316×3216 raw screenshot → encoding ~4× faster
+IMAGE_MAX_PIXELS = 1280 * 1280
 
 # ── ANSI colours ──────────────────────────────────────────────────────────────
 RESET = "\033[0m"
@@ -49,21 +68,64 @@ def c(text, colour):
 
 
 # ── Image helpers ──────────────────────────────────────────────────────────────
-def load_image_b64(path: str) -> tuple[str, str]:
-    """Load image from path, return (base64_data, mime_type)."""
+def load_image_b64(path: str) -> tuple[str, str, str]:
+    """
+    Load image from path, auto-resize if > IMAGE_MAX_PIXELS.
+    Returns (base64_data, mime_type, info_string).
+    """
     path = path.strip().strip('"').strip("'")
     if not os.path.exists(path):
         raise FileNotFoundError(f"Image not found: {path}")
+
     mime = mimetypes.guess_type(path)[0] or "image/jpeg"
-    with open(path, "rb") as f:
-        b64 = base64.b64encode(f.read()).decode("utf-8")
-    return b64, mime
+    info = ""
+
+    if _HAS_PIL and _PIL_Image is not None:
+        from PIL import Image as PILImg  # local import avoids type checker noise
+
+        img = PILImg.open(path)
+        orig_w, orig_h = img.size
+        orig_pixels = orig_w * orig_h
+
+        if orig_pixels > IMAGE_MAX_PIXELS:
+            scale = (IMAGE_MAX_PIXELS / orig_pixels) ** 0.5
+            new_w = int(orig_w * scale)
+            new_h = int(orig_h * scale)
+            resample = getattr(
+                PILImg,
+                "LANCZOS",
+                getattr(getattr(PILImg, "Resampling", None), "LANCZOS", 1),
+            )
+            img = img.resize((new_w, new_h), resample)
+            info = (
+                f"{orig_w}×{orig_h} → {new_w}×{new_h} "
+                f"({orig_pixels // 1_000_000:.1f}MP → {new_w * new_h // 1_000_000:.1f}MP, "
+                f"resized for speed)"
+            )
+            buf = io.BytesIO()
+            img.convert("RGB").save(buf, format="JPEG", quality=92)
+            b64 = base64.b64encode(buf.getvalue()).decode("utf-8")
+            mime = "image/jpeg"
+        else:
+            info = f"{orig_w}×{orig_h} ({orig_pixels // 1_000_000:.1f}MP, no resize needed)"
+            with open(path, "rb") as f:
+                b64 = base64.b64encode(f.read()).decode("utf-8")
+    else:
+        # Pillow not installed — load raw, no resize
+        info = "install Pillow for auto-resize: pip install Pillow"
+        with open(path, "rb") as f:
+            b64 = base64.b64encode(f.read()).decode("utf-8")
+
+    return b64, mime, info
 
 
-def make_vision_message(image_path: str, question: str) -> dict:
-    """Build an OpenAI-compatible multimodal user message."""
-    b64, mime = load_image_b64(image_path)
-    return {
+def make_vision_message(image_path: str, question: str) -> tuple[dict, str]:
+    """
+    Build an OpenAI-compatible multimodal user message.
+    Returns (message_dict, resize_info_string).
+    """
+    b64, mime, info = load_image_b64(image_path)
+    msg = {
         "role": "user",
         "content": [
             {
@@ -76,6 +138,7 @@ def make_vision_message(image_path: str, question: str) -> dict:
             },
         ],
     }
+    return msg, info
 
 
 # ── Streaming chat completion ──────────────────────────────────────────────────
@@ -293,8 +356,9 @@ def main():
 
                 try:
                     print(c(f"  📷 Loading: {img_path}", BLUE))
-                    msg = make_vision_message(img_path, question)
+                    msg, img_info = make_vision_message(img_path, question)
                     messages.append(msg)
+                    print(c(f"  🖼  {img_info}", DIM))
                     print(c(f"  ❓ Question: {question}", DIM))
                 except FileNotFoundError as e:
                     print(c(f"  [ERROR] {e}", RED))
@@ -336,9 +400,12 @@ Commands:
 
 Vision tips:
   • Works with .jpg .png .gif .webp .bmp
+  • Auto-resizes to 1280×1280 max (1.6MP) before encoding
+    → faster encoding, fewer KV cache tokens, higher gen t/s
+  • Large images (e.g. 3316×3216) are scaled down automatically
   • After sending an image you can follow up with text
-    (the model remembers the image in this turn)
   • /clear resets everything including images
+  • Need Pillow for auto-resize: pip install Pillow
 """,
                         DIM,
                     )
