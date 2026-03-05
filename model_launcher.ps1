@@ -16,7 +16,7 @@ switch ($Model.ToLower()) {
         $port    = 8002
         $model   = "$MODELS\Qwen3.5-35B-A3B-Q3_K_S.gguf"
         $mmproj  = "$MODELS\mmproj-35B-F16.gguf"
-        $ctx     = 65536
+        $ctx     = 65536    # 64K — max that fits in 16GB with this model at full speed
         $extra   = @("--parallel", "1")
     }
     "9b" {
